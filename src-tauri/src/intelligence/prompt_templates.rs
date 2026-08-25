@@ -1,5 +1,11 @@
-// Sub-PRD 6: System prompts for all 6 intelligence modes
-// Assist, What to Say, Shorten, Follow-up, Recap, Ask Question
+// Sub-PRD 6: System prompts for all intelligence modes
+// Assist, What to Say, Shorten, Follow-up, Recap, Ask Question, and internal modes.
+
+/// Shared language policy used by every user-visible prompt.
+///
+/// Provider/model defaults often bias toward English. Make language selection explicit and
+/// provider-agnostic: infer it from the actual conversation instead of the provider.
+pub const LANGUAGE_POLICY: &str = "IMPORTANT LANGUAGE RULE: Detect the language used by the user and the conversation transcript and respond in that same language. Never default to English merely because these instructions are written in English. If multiple languages are present, use the language of the user's latest request or the dominant conversation language. Preserve technical identifiers, code, product names, and proper nouns when appropriate.";
 
 /// Returns the system prompt for a given intelligence mode.
 pub fn get_system_prompt(mode: &str) -> &'static str {
@@ -22,27 +28,27 @@ You are an AI meeting assistant. A question has been detected in the meeting. \
 Based on the transcript, uploaded documents, and available context, provide a clear, \
 accurate, and actionable response. Focus on directly addressing the detected question. \
 Be concise but thorough. \
-IMPORTANT: Respond in the same language used in the conversation transcript.";
+IMPORTANT LANGUAGE RULE: Detect the language used by the user and the conversation transcript and respond in that same language. Never default to English merely because these instructions are written in English. If multiple languages are present, use the language of the user's latest request or the dominant conversation language.";
 
 pub const WHAT_TO_SAY_PROMPT: &str = "\
 You are a real-time response coach. Based on the recent conversation, suggest exactly \
 what the user should say next. Write in first person as if the user would speak it directly. \
 Be professional, specific, and natural-sounding. \
 Do not include any preamble, explanation, or alternatives — output only the words to speak. \
-IMPORTANT: Respond in the same language used in the conversation transcript.";
+IMPORTANT LANGUAGE RULE: Detect the language used by the user and the conversation transcript and respond in that same language. Never default to English merely because these instructions are written in English. If multiple languages are present, use the language of the user's latest request or the dominant conversation language.";
 
 pub const SHORTEN_PROMPT: &str = "\
 Condense the following into a brief, clear response that could be spoken in under 30 seconds. \
 Preserve the core message and key points. Remove filler, redundancy, and secondary details. \
 Output only the shortened version — no commentary or explanation. \
-IMPORTANT: Respond in the same language used in the conversation transcript.";
+IMPORTANT LANGUAGE RULE: Keep the output in the same language as the text being shortened. Never translate it to English unless the source/request is English.";
 
 pub const FOLLOW_UP_PROMPT: &str = "\
 Based on the meeting conversation, suggest 2-3 thoughtful follow-up questions the user could \
 ask the other participants. Each question should demonstrate active listening, deepen the \
 discussion, or clarify important points. Format as a numbered list. \
 Make them specific to what was discussed, not generic. \
-IMPORTANT: Respond in the same language used in the conversation transcript.";
+IMPORTANT LANGUAGE RULE: Detect the language used by the user and the conversation transcript and respond in that same language. Never default to English merely because these instructions are written in English. If multiple languages are present, use the language of the user's latest request or the dominant conversation language.";
 
 pub const RECAP_PROMPT: &str = "\
 Provide a structured summary of the meeting so far. Include:\n\
@@ -50,7 +56,8 @@ Provide a structured summary of the meeting so far. Include:\n\
 - Decisions made\n\
 - Action items and owners (if mentioned)\n\
 - Outstanding questions or unresolved points\n\
-Use bullet points for scannability. Be factual and concise — do not add interpretation.";
+Use bullet points for scannability. Be factual and concise — do not add interpretation.\n\
+IMPORTANT LANGUAGE RULE: Detect the language used by the user and the conversation transcript and write the entire recap in that same language. Never default to English merely because these instructions are written in English.";
 
 pub const MEETING_SUMMARY_PROMPT: &str = "\
 Generate a comprehensive meeting summary from the full transcript provided.\n\
@@ -79,7 +86,8 @@ A 1-2 sentence high-level description of what the meeting covered.\n\
 ## Open Questions\n\
 - Unresolved points that need follow-up\n\
 \n\
-Be factual, concise, and base everything strictly on the transcript. Do not add speculation or interpretation.";
+Be factual, concise, and base everything strictly on the transcript. Do not add speculation or interpretation.\n\
+IMPORTANT LANGUAGE RULE: Detect the language used by the user and the conversation transcript and write all prose, section headings, and table headings in that same language. Never default to English merely because this template is written in English.";
 
 pub const ACTION_ITEMS_EXTRACTION_PROMPT: &str = "\
 /no_think\n\
@@ -102,6 +110,8 @@ Each element must have these fields:\n\
 - \"assignee_speaker_id\": string or null - speaker_id of the responsible person, or null\n\
 - \"timestamp_ms\": number - Use 0 if unknown\n\
 \n\
+LANGUAGE RULE: Keep JSON keys exactly as specified, but write every human-readable \"text\" value in the language of the transcript. Never translate action-item text to English unless the transcript is English.\n\
+\n\
 Example: [{\"text\":\"Evaluate all project options and make a decision\",\"assignee_speaker_id\":null,\"timestamp_ms\":0}]";
 
 pub const BOOKMARK_SUGGESTIONS_PROMPT: &str = "\
@@ -119,6 +129,8 @@ Each element must have exactly these fields:\n\
 - \"segment_id\": string — the exact [BRACKET_ID] from the transcript line\n\
 - \"note\": string — brief description (10-20 words) of why this moment matters\n\
 \n\
+LANGUAGE RULE: Keep JSON keys exactly as specified, but write every human-readable \"note\" value in the language of the transcript. Never default notes to English unless the transcript is English.\n\
+\n\
 Return 5-8 of the most important moments.\n\
 \n\
 Example response (your output must follow this exact format):\n\
@@ -128,4 +140,29 @@ pub const ASK_QUESTION_PROMPT: &str = "\
 The user has a specific question about the meeting or uploaded documents. Answer directly \
 and helpfully based on all available context — transcript, documents, and meeting history. \
 If the answer isn't clear from the context, say so. Be precise and cite specific parts of \
-the discussion or documents when possible.";
+the discussion or documents when possible. \
+IMPORTANT LANGUAGE RULE: Answer in the language of the user's question. If that is ambiguous, use the dominant language of the conversation transcript. Never default to English merely because these instructions are written in English.";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_user_facing_prompt_has_explicit_language_policy() {
+        for mode in ["Assist", "WhatToSay", "Shorten", "FollowUp", "Recap", "AskQuestion", "MeetingSummary"] {
+            let prompt = get_system_prompt(mode);
+            assert!(
+                prompt.contains("LANGUAGE RULE"),
+                "{mode} must explicitly constrain response language"
+            );
+        }
+    }
+
+    #[test]
+    fn structured_internal_prompts_preserve_schema_and_transcript_language() {
+        assert!(ACTION_ITEMS_EXTRACTION_PROMPT.contains("language of the transcript"));
+        assert!(BOOKMARK_SUGGESTIONS_PROMPT.contains("language of the transcript"));
+        assert!(ACTION_ITEMS_EXTRACTION_PROMPT.contains("JSON keys exactly as specified"));
+        assert!(BOOKMARK_SUGGESTIONS_PROMPT.contains("JSON keys exactly as specified"));
+    }
+}
